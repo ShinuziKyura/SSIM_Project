@@ -13,13 +13,14 @@ def load_data(path, ext=('jpeg', 'jpg', 'png', 'tiff'), load_from_cache=True, sa
     index = 0
 
     pathname = os.path.splitdrive(os.path.abspath(path))
-    cached_file = os.path.join(
-        os.path.abspath('./cache/'),
+    cached_file = os.path.normpath(os.path.join(
+        os.path.dirname(sys.argv[0]),
+        'cache/',
         pathname[0].replace(':', '').replace(os.path.sep, '__').strip('__')
         + '__'
         + pathname[1].replace(os.path.sep, '__').strip('__')
         + '.npz'
-    )
+    ))
 
     if load_from_cache and os.path.exists(cached_file):
         print('Loading cached data...')

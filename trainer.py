@@ -21,7 +21,7 @@ def execute(images_path, masks_path, models_path):
     masks = storage.load_data(masks_path)
 
     # create dataset
-    dataset = datasets.create_muenster_dataset(images, masks, rescale=(256, 256)) # TODO make both function and rescale parameters
+    dataset = datasets.create_muenster_dataset(images, masks, rescale=(512, 512)) # TODO make both function and rescale parameters
 
     # create / load model
     model = None
@@ -42,11 +42,19 @@ def execute(images_path, masks_path, models_path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 3:
-        muenster_models_path = os.path.join(sys.argv[0], sys.argv[3])
-    if len(sys.argv) > 2:
-        muenster_masks_path = os.path.join(sys.argv[0], sys.argv[2])
-    if len(sys.argv) > 1:
-        muenster_images_path = os.path.join(sys.argv[0], sys.argv[1])
+    base_path = os.path.dirname(sys.argv[0])
+
+    muenster_images_path = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[1] if len(sys.argv) > 1 else muenster_images_path
+    ))
+    muenster_masks_path = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[2] if len(sys.argv) > 2 else muenster_masks_path
+    ))
+    muenster_models_path = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[3] if len(sys.argv) > 3 else muenster_models_path
+    ))
 
     execute(muenster_images_path, muenster_masks_path, muenster_models_path)
