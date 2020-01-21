@@ -6,72 +6,167 @@ import tensorflow as tf
 #  https://blog.athelas.com/a-brief-history-of-cnns-in-image-segmentation-from-r-cnn-to-mask-r-cnn-34ea83205de4
 #  https://www.tensorflow.org/tutorials/images/segmentation
 #  https://arxiv.org/abs/1505.04597
-def create_model(input_shape, output_shape):
+
+def downsampling_layer(filters, size, apply_normalization=True):
+    initializer = tf.random_normal_initializer(0.0, 0.02)
+
+    result = tf.keras.Sequential()
+    result.add(
+        tf.keras.layers.Conv2D(filters, size,
+                               strides=2,
+                               padding='same',
+                               kernel_initializer=initializer,
+                               use_bias=False)
+    )
+
+    if apply_normalization:
+        result.add(tf.keras.layers.BatchNormalization())
+
+    result.add(tf.keras.layers.LeakyReLU())
+
+    return result
+
+
+def upsampling_layer(filters, size, apply_dropout=False):
+    initializer = tf.random_normal_initializer(0.0, 0.02)
+
+    result = tf.keras.Sequential()
+    result.add(
+        tf.keras.layers.Conv2DTranspose(filters, size,
+                                        strides=2,
+                                        padding='same',
+                                        kernel_initializer=initializer,
+                                        use_bias=False)
+    )
+
+    result.add(tf.keras.layers.BatchNormalization())
+
+    if apply_dropout:
+        result.add(tf.keras.layers.Dropout(0.5))
+
+    result.add(tf.keras.layers.ReLU())
+
+    return result
+
+
+def create_unet_model():  # TODO possibly pass input/output shape and adjust
     print('Creating model...')
 
-    inputs = tf.keras.Input(shape=input_shape)
+    inputs = tf.keras.layers.Input(shape=[256, 256, 3])
 
-    # Encoder
-    x = tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu')(inputs)
-    x = tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu')(x)
-    inputs_1 = tf.keras.layers.MaxPool2D(pool_size=2)(x)
-    x = tf.keras.layers.Conv2D(filters=128, kernel_size=3, activation='relu')(inputs_1)
-    x = tf.keras.layers.Conv2D(filters=128, kernel_size=3, activation='relu')(x)
-    inputs_2 = tf.keras.layers.MaxPool2D(pool_size=2)(x)
-    x = tf.keras.layers.Conv2D(filters=256, kernel_size=3, activation='relu')(inputs_2)
-    x = tf.keras.layers.Conv2D(filters=256, kernel_size=3, activation='relu')(x)
-    inputs_3 = tf.keras.layers.MaxPool2D(pool_size=2)(x)
-    x = tf.keras.layers.Conv2D(filters=512, kernel_size=3, activation='relu')(inputs_3)
-    x = tf.keras.layers.Conv2D(filters=512, kernel_size=3, activation='relu')(x)
-    inputs_4 = tf.keras.layers.MaxPool2D(pool_size=2)(x)
-    x = tf.keras.layers.Conv2D(filters=1024, kernel_size=3, activation='relu')(inputs_4)
-    x = tf.keras.layers.Conv2D(filters=1024, kernel_size=3, activation='relu')(x)
+    down_stack = [
+        downsampling_layer(64, 4, apply_normalization=False),
+        downsampling_layer(128, 4),
+        downsampling_layer(256, 4),
+        downsampling_layer(512, 4),
+        downsampling_layer(512, 4),
+        downsampling_layer(512, 4),
+        downsampling_layer(512, 4),
+        downsampling_layer(512, 4),
+    ]
 
-    # Decoder
-    x = tf.keras.layers.UpSampling2D(size=2, interpolation='bilinear')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=512, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=512, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.UpSampling2D(size=2, interpolation='bilinear')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=256, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=256, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.UpSampling2D(size=2, interpolation='bilinear')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=128, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=128, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.UpSampling2D(size=2, interpolation='bilinear')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=64, kernel_size=3, activation='relu')(x)
-    x = tf.keras.layers.Conv2DTranspose(filters=64, kernel_size=3, activation='relu')(x)
+    up_stack = [
+        upsampling_layer(512, 4, apply_dropout=True),
+        upsampling_layer(512, 4, apply_dropout=True),
+        upsampling_layer(512, 4, apply_dropout=True),
+        upsampling_layer(512, 4),
+        upsampling_layer(256, 4),
+        upsampling_layer(128, 4),
+        upsampling_layer(64, 4),
+    ]
 
-    outputs = tf.keras.layers.Conv2DTranspose(filters=output_shape, kernel_size=1, activation='softmax')(x)
+    initializer = tf.random_normal_initializer(0.0, 0.02)
+    last = tf.keras.layers.Conv2DTranspose(filters=1,
+                                           kernel_size=3,
+                                           strides=2,
+                                           padding='same',
+                                           kernel_initializer=initializer,
+                                           activation='sigmoid')
 
-    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    x = inputs
 
-    print('Creation successful!')
+    # Downsampling and creating the skip connections
+    skips = []
+    for down in down_stack:
+        x = down(x)
+        skips.append(x)
 
-    return model
+    # Upsampling and establishing the skip connections
+    skips = reversed(skips[:-1])
+    for up, skip in zip(up_stack, skips):
+        x = up(x)
+        x = tf.keras.layers.Concatenate()([x, skip])
+
+    outputs = last(x)
+
+    print('Model created!')
+
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
 
 
 @tf.function
-def train_step(model, images, labels, train_loss, train_accuracy):
-    loss_function = tf.keras.losses.SparseCategoricalCrossentropy()
-    optimizer = tf.keras.optimizers.Adam()
-
+def train_step(model, images, labels, optimizer, loss_function):
     with tf.GradientTape() as tape:
         predictions = model(images, training=True)
-        loss = loss_function(labels, predictions)
+        loss = loss_function(predictions, labels)
 
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-    train_loss(loss)
-    train_accuracy(labels, predictions)
+    return loss
 
 
 @tf.function
-def test_step(model, images, labels, test_loss, test_accuracy):
-    loss_function = tf.keras.losses.SparseCategoricalCrossentropy()
-
+def test_step(model, images, labels, loss_function):
     predictions = model(images, training=False)
-    loss = loss_function(labels, predictions)
+    loss = loss_function(predictions, labels)
 
-    test_loss(loss)
-    test_accuracy(labels, predictions)
+    return loss
+
+
+def train_model(dataset, model, dataset_split=0.1, learning_rate=0.001, batch_size=50, epochs=20):
+    print('Training model...')
+
+    split_index = int(dataset.size * dataset_split)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    loss_function = tf.keras.losses.MeanSquaredError()
+
+    train_dataset = tf.data.Dataset.from_tensor_slices(
+        (dataset.images[split_index:], dataset.labels[split_index:])
+    ).shuffle(dataset.size, reshuffle_each_iteration=True).batch(batch_size)
+
+    test_dataset = tf.data.Dataset.from_tensor_slices(
+        (dataset.images[:split_index], dataset.labels[:split_index])
+    ).batch(batch_size)
+
+    for epoch in range(epochs):
+        print('\tEpoch: {}'.format(epoch + 1))
+
+        total_loss = 0.0
+        total_steps = 0
+
+        for images, labels in train_dataset:
+            loss = train_step(model, images, labels, optimizer, loss_function)
+
+            total_loss += loss
+            total_steps += 1
+
+            print('\t\tTrain loss: {}'.format(loss), end='\r')
+
+        print('\t\tTrain loss: {}'.format(total_loss / total_steps))
+
+        total_loss = 0.0
+        amount = 0
+
+        for images, labels in test_dataset:
+            loss = test_step(model, images, labels, loss_function)
+
+            total_loss += loss
+            amount += 1
+
+            print('\t\tTest loss: {}'.format(loss), end='\r')
+
+        print('\t\tTest loss: {}'.format(total_loss / total_steps))
+
+    print('Model trained!')

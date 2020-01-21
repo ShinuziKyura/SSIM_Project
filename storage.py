@@ -1,16 +1,17 @@
 import os
 import sys
 
-import cv2 as cv
 import numpy as np
-import tensorflow as tf
+import cv2 as cv
 
 
-def load_data(path, ext=('jpeg', 'jpg', 'png', 'tiff'), load_from_cache=True, save_to_cache=True):
+def load_datamap(path, ext=('jpeg', 'jpg', 'png', 'tiff'), datamap=None, load_from_cache=True, save_to_cache=True):
     assert os.path.isdir(path)
 
-    named_data = np.empty(shape=(0,), dtype=[('name', np.str_, 255), ('data', np.ndarray)])
-    index = 0
+    if datamap is None:
+        datamap = np.empty(shape=(0,), dtype=[('name', np.str_, 255), ('data', np.ndarray)])
+
+    index = len(datamap)
 
     pathname = os.path.splitdrive(os.path.abspath(path))
     cached_file = os.path.normpath(os.path.join(
@@ -25,10 +26,10 @@ def load_data(path, ext=('jpeg', 'jpg', 'png', 'tiff'), load_from_cache=True, sa
     if load_from_cache and os.path.exists(cached_file):
         print('Loading cached data...')
 
-        with np.load(cached_file, allow_pickle=True) as archive:
-            named_data = archive['named_data']
+        with np.load(cached_file, allow_pickle=True) as cache:
+            datamap = np.concatenate((datamap, cache['datamap']))
 
-        print('Data loaded!')
+        print('Cached data loaded!')
     else:
         print('Loading data...')
 
@@ -43,53 +44,21 @@ def load_data(path, ext=('jpeg', 'jpg', 'png', 'tiff'), load_from_cache=True, sa
                 name = os.path.splitext(filename)[0]
                 data = cv.imread(filepath, cv.IMREAD_UNCHANGED)
 
-                if index == named_data.shape[0]:
-                    named_data.resize((index + 100,), refcheck=False)
+                if index >= len(datamap):
+                    datamap.resize((index + 1000,), refcheck=False)
 
-                named_data[index] = (name, data)
+                datamap[index] = (name, data)
                 index += 1
 
-        named_data.resize((index,), refcheck=False)
+        datamap.resize((index,), refcheck=False)
 
         print('Data loaded!')
 
         if save_to_cache:
             print('Caching data...')
 
-            np.savez_compressed(cached_file, named_data=named_data)
+            np.savez_compressed(cached_file, datamap=datamap)
 
             print('Data cached!')
 
-    return named_data
-
-
-def load_model(path):
-    model = None
-    loaded = False
-
-    try:
-        print('Loading model...')
-        model = tf.keras.models.load_model(path)
-        loaded = True
-        print('Model loaded!')
-    except (IOError, ImportError) as ex:
-        print('Load error!')
-        print(ex)
-
-    #return model, loaded
-    return model
-
-
-def save_model(model, path, model_format='tf'):
-    saved = False
-
-    try:
-        print('Saving model...')
-        tf.keras.models.save_model(model, path, save_format=model_format)
-        saved = True
-        print('Model saved!')
-    except ImportError as ex:
-        print('Save error!')
-        print(ex)
-
-    return saved
+    return datamap

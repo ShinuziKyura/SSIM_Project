@@ -1,10 +1,9 @@
-import os
-
-import cv2 as cv
 import numpy as np
+import cv2 as cv
+import tensorflow as tf
 
 
-class TFImageDataset:
+class ImageMaskDataset:
     def __init__(self, images, labels, image_shape=None, label_shape=None, size=None):
         assert images.shape[0] == labels.shape[0]
 
@@ -17,23 +16,22 @@ class TFImageDataset:
         self.size = (size if size is not None else images.shape[0])
 
 
-def create_muenster_dataset(images, masks, rescale=None):
+def create_dataset(images, masks, rescale=None):
     assert images.shape[0] > 0
     assert masks.shape[0] > 0
 
-    scale_arr = list(images[0]['data'].shape[0:2])
-    rescale_arr = list(rescale)
+    print('Creating dataset...')
 
-    #image_shape = images[0]['data'].shape
-    #label_shape = (8,) # FIXME if using bounding box, make this (4,)
+    scale_arr = list(images[0]['data'].shape[0:2])
+    rescale_arr = list(rescale) if rescale is not None else scale_arr
+
+    image_shape = rescale + images[0]['data'].shape[2:]
+    label_shape = rescale + (1,)
 
     images_map = {}
     masks_map = {}
 
     if rescale is not None:
-        image_shape = rescale + images[0]['data'].shape[2:]
-        label_shape = rescale
-
         if np.all(scale_arr < rescale_arr, 0):
             method = cv.INTER_CUBIC
         elif np.all(scale_arr > rescale_arr, 0):
@@ -46,45 +44,71 @@ def create_muenster_dataset(images, masks, rescale=None):
         for mask in masks:
             masks_map[mask['name']] = cv.resize(mask['data'], rescale, method)
     else:
-        image_shape = scale_arr + images[0]['data'].shape[2:]
-        label_shape = scale_arr
-
         for image in images:
             images_map[image['name']] = image['data']
         for mask in masks:
             masks_map[mask['name']] = mask['data']
 
-    images = np.empty(shape=masks.shape[0:1] + image_shape, dtype=images[0]['data'].dtype)
-    labels = np.empty(shape=masks.shape[0:1] + label_shape, dtype=masks[0]['data'].dtype)
+    images = np.empty(shape=masks.shape[0:1] + image_shape, dtype=np.float32)
+    labels = np.empty(shape=masks.shape[0:1] + label_shape, dtype=np.float32)
 
     index = 0
 
     for name in masks_map:
         if name in images_map:
             mask = cv.cvtColor(masks_map[name], cv.COLOR_BGRA2GRAY)
-            corners = cv.cornerHarris(mask, 2, 3, 0.04)
-            _, corners = cv.threshold(corners, 0.1 * corners.max(), 255.0, cv.THRESH_BINARY)
-            corners = np.uint8(corners)
 
-            _, _, _, label = cv.connectedComponentsWithStats(corners)
-            label = np.int32(label[1:])
+            images[index] = images_map[name] / 255.0
+            labels[index] = mask.reshape(mask.shape + (1,)) / 255.0
 
-            if label.shape[0] == 4:
-                # TODO if using points, calculate bounding box
-#               if rescale is not None:
-#                   label = label / list(rescale)
-
-#               label = np.array([tuple(elem) for elem in label.tolist()], dtype=[('x', np.float32), ('y', np.float32)])
-#               label.sort(0, order=('y', 'x'))
-#               label = np.array([list(elem) for elem in label.tolist()])
-#               label = label.flatten()
-
-                images[index] = images_map[name]
-                labels[index] = np.uint8(mask / 255)
-
-                index += 1
+            index += 1
 
     images.resize((index,) + images.shape[1:], refcheck=False)
     labels.resize((index,) + labels.shape[1:], refcheck=False)
 
-    return TFImageDataset(images, labels, image_shape, label_shape, index)
+    print('Dataset created!')
+
+    return ImageMaskDataset(images, labels, image_shape, label_shape, index)
+
+
+def augment_dataset(dataset, new_size=1000):
+    assert new_size > dataset.size
+
+    print('Augmenting dataset...')
+
+    old_size = dataset.size
+
+    dataset.images.resize((new_size,) + dataset.image_shape, refcheck=False)
+    dataset.labels.resize((new_size,) + dataset.label_shape, refcheck=False)
+    dataset.size = new_size
+
+    augmentation = tf.keras.preprocessing.image.ImageDataGenerator(
+        rotation_range=360,
+        width_shift_range=0.25,
+        height_shift_range=0.25,
+        shear_range=0.5,
+        zoom_range=0.25,
+        channel_shift_range=0.5,
+        fill_mode='reflect'
+    )
+
+    for index in range(old_size, new_size):
+        choice = np.random.randint(old_size)
+        seed = np.random.randint(2147483647)
+
+        dataset.images[index] = augmentation.random_transform(dataset.images[choice], seed)
+        dataset.labels[index] = augmentation.random_transform(dataset.labels[choice], seed)
+
+        # cv.imshow('image_wnd', dataset.images[index])
+        # cv.imshow('label_wnd', dataset.labels[index])
+        # cv.waitKey(0)
+
+    for _ in range(np.amax([int(new_size * 0.01), 1])):
+        permutation = np.random.permutation(new_size)
+
+        dataset.images = dataset.images[permutation]
+        dataset.labels = dataset.labels[permutation]
+
+    print('Dataset augmented!')
+
+    return dataset

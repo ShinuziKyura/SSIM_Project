@@ -1,7 +1,6 @@
 import os
 import sys
 
-import cv2 as cv
 import numpy as np
 import tensorflow as tf
 
@@ -11,76 +10,92 @@ import datasets
 import models
 
 
-muenster_images_path = '.\\datasets\\Muenster_BarcodeDB\\N95-2592x1944_scaledTo640x480bilinear'
-muenster_masks_path = '.\\datasets\\Muenster_BarcodeDB_detection_masks\\Detection'
-muenster_models_path = '.\\models\\Muenster_BarcodeDB_N95-2592x1944_scaledTo640x480bilinear'
-number_of_epochs = 10
+wwu_muenster_images_path = 'datasets/WWU_Muenster_Barcode_DB/images/'
+wwu_muenster_masks_path = 'datasets/WWU_Muenster_Barcode_DB/masks/'
+
+arte_lab_images_path = 'datasets/ArTe-Lab_1D_Medium_Barcode/images/'
+arte_lab_masks_path = 'datasets/ArTe-Lab_1D_Medium_Barcode/masks/'
+
+mse_models_path = 'models/mean_squared_error'
+#bc_models_path = 'models/binary_crossentropy'
 
 
-def execute(images_path, masks_path, models_path):
-    # load data
-    images = storage.load_data(images_path)
-    masks = storage.load_data(masks_path)
+def execute(image_paths, mask_paths, model_path):
+    assert len(image_paths) == len(mask_paths)
 
-    # create dataset
-    dataset = datasets.create_muenster_dataset(images, masks, rescale=(512, 512)) # TODO make both function and rescale parameters
+    print('Initializing...')
 
-    # create / load model
-    model = None
+    # Load data
+    images = None
+    masks = None
 
-    if utils.boolean_input('Should load model?'):
-        model = storage.load_model(models_path)
+    for image_path, mask_path in zip(image_paths, mask_paths):
+        images = storage.load_datamap(image_path, datamap=images)
+        masks = storage.load_datamap(mask_path, datamap=masks)
 
-    if model is None:
-        model = models.create_model(dataset.image_shape, dataset.label_shape[0])
+    # Create dataset
+    dataset = datasets.create_dataset(images, masks, rescale=(256, 256))
 
-    # train model
-    train_loss = tf.keras.metrics.Mean(name='train_loss')
-    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-    test_loss = tf.keras.metrics.Mean(name='test_loss')
-    test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+    # Augment dataset
+    dataset = datasets.augment_dataset(dataset, new_size=5000)
 
-    for epoch in range(number_of_epochs):
-        train_loss.reset_states()
-        train_accuracy.reset_states()
-        test_loss.reset_states()
-        test_accuracy.reset_states()
+    # Create model
+    model = models.create_unet_model()
 
-        for images, labels in zip(dataset.images, dataset.labels):
-            models.train_step(model, images, labels, train_loss=train_loss, train_accuracy=train_accuracy)
+    # Load weights
+    if utils.boolean_input('Load weights?'):
+        model.load_weights(model_path)
 
-        for images, labels in zip(dataset.images, dataset.labels):
-            models.test_step(model, images, labels, test_loss=test_loss, test_accuracy=test_accuracy)
+    # Predict images (pre-training)
+    for index in range(5):
+        result = model.predict(np.array([dataset.images[index]]))
+        utils.display_prediction(dataset.images[index], dataset.labels[index], result)
 
-        print('Epoch {}, Loss: {}, Accuracy: {}, Test Loss: {}, Test Accuracy: {}'.format(
-            epoch + 1,
-            train_loss.result(),
-            train_accuracy.result() * 100,
-            test_loss.result(),
-            test_accuracy.result() * 100)
-        )
+    # Train model
+    models.train_model(dataset, model, batch_size=50, epochs=20)
 
-    # save model
-    if utils.boolean_input('Should save model?'):
-        storage.save_model(model, models_path)
+    # Predict images (post-training)
+    for index in range(5):
+        result = model.predict(np.array([dataset.images[index]]))
+        utils.display_prediction(dataset.images[index], dataset.labels[index], result)
 
-    sys.exit(0)
+    # Save weights
+    if utils.boolean_input('Save weights?'):
+        model.save_weights(model_path)
+
+    print('Terminating...')
+    return model
 
 
 if __name__ == '__main__':
+    gpu_devices = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(gpu_devices[0], True)
+
     base_path = os.path.dirname(sys.argv[0])
 
-    muenster_images_path = os.path.normpath(os.path.join(
+    images_path_1 = os.path.normpath(os.path.join(
         base_path,
-        sys.argv[1] if len(sys.argv) > 1 else muenster_images_path
+        sys.argv[1] if len(sys.argv) > 1 else wwu_muenster_images_path
     ))
-    muenster_masks_path = os.path.normpath(os.path.join(
+    images_path_2 = os.path.normpath(os.path.join(
         base_path,
-        sys.argv[2] if len(sys.argv) > 2 else muenster_masks_path
-    ))
-    muenster_models_path = os.path.normpath(os.path.join(
-        base_path,
-        sys.argv[3] if len(sys.argv) > 3 else muenster_models_path
+        sys.argv[1] if len(sys.argv) > 1 else arte_lab_images_path
     ))
 
-    execute(muenster_images_path, muenster_masks_path, muenster_models_path)
+    masks_path_1 = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[2] if len(sys.argv) > 2 else wwu_muenster_masks_path
+    ))
+    masks_path_2 = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[2] if len(sys.argv) > 2 else arte_lab_masks_path
+    ))
+
+    models_path = os.path.normpath(os.path.join(
+        base_path,
+        sys.argv[3] if len(sys.argv) > 3 else mse_models_path
+    ))
+
+    execute([images_path_1, images_path_2], [masks_path_1, masks_path_2], models_path)
+
+    sys.exit(0)
