@@ -3,6 +3,7 @@ import sys
 
 import cv2 as cv
 import numpy as np
+import tensorflow as tf
 
 import utils
 import storage
@@ -13,6 +14,7 @@ import models
 muenster_images_path = '.\\datasets\\Muenster_BarcodeDB\\N95-2592x1944_scaledTo640x480bilinear'
 muenster_masks_path = '.\\datasets\\Muenster_BarcodeDB_detection_masks\\Detection'
 muenster_models_path = '.\\models\\Muenster_BarcodeDB_N95-2592x1944_scaledTo640x480bilinear'
+number_of_epochs = 10
 
 
 def execute(images_path, masks_path, models_path):
@@ -33,6 +35,30 @@ def execute(images_path, masks_path, models_path):
         model = models.create_model(dataset.image_shape, dataset.label_shape[0])
 
     # train model
+    train_loss = tf.keras.metrics.Mean(name='train_loss')
+    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+    test_loss = tf.keras.metrics.Mean(name='test_loss')
+    test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+
+    for epoch in range(number_of_epochs):
+        train_loss.reset_states()
+        train_accuracy.reset_states()
+        test_loss.reset_states()
+        test_accuracy.reset_states()
+
+        for images, labels in zip(dataset.images, dataset.labels):
+            models.train_step(model, images, labels, train_loss=train_loss, train_accuracy=train_accuracy)
+
+        for images, labels in zip(dataset.images, dataset.labels):
+            models.test_step(model, images, labels, test_loss=test_loss, test_accuracy=test_accuracy)
+
+        print('Epoch {}, Loss: {}, Accuracy: {}, Test Loss: {}, Test Accuracy: {}'.format(
+            epoch + 1,
+            train_loss.result(),
+            train_accuracy.result() * 100,
+            test_loss.result(),
+            test_accuracy.result() * 100)
+        )
 
     # save model
     if utils.boolean_input('Should save model?'):
