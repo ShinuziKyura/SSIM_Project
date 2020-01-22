@@ -15,4 +15,4 @@ On a terminal, run:
 
 where:
 
-<loss_function>: one of 'mse', 'mae', or 'bce'
+<loss_function>: one of 'mse', 'mae', 'bce', or empty otherwise
