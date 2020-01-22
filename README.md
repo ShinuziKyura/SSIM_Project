@@ -1,6 +1,7 @@
 # Installation instructions:
 
 Install Python 3.6.8
+
 On a terminal, run:
 
 > easy_install -U pip
