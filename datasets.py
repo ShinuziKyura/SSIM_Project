@@ -40,9 +40,9 @@ def create_dataset(images, masks, rescale=None):
             method = cv.INTER_LINEAR
 
         for image in images:
-            images_map[image['name']] = cv.resize(image['data'], rescale, method)
+            images_map[image['name']] = cv.resize(image['data'], rescale, interpolation=method)
         for mask in masks:
-            masks_map[mask['name']] = cv.resize(mask['data'], rescale, method)
+            masks_map[mask['name']] = cv.resize(mask['data'], rescale, interpolation=method)
     else:
         for image in images:
             images_map[image['name']] = image['data']
@@ -66,7 +66,7 @@ def create_dataset(images, masks, rescale=None):
     images.resize((index,) + images.shape[1:], refcheck=False)
     labels.resize((index,) + labels.shape[1:], refcheck=False)
 
-    print('Dataset created!')
+    print('Creation finished!')
 
     return ImageMaskDataset(images, labels, image_shape, label_shape, index)
 
@@ -109,6 +109,6 @@ def augment_dataset(dataset, new_size=1000):
         dataset.images = dataset.images[permutation]
         dataset.labels = dataset.labels[permutation]
 
-    print('Dataset augmented!')
+    print('Augmentation finished!')
 
     return dataset

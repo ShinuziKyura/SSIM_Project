@@ -29,7 +29,7 @@ def load_datamap(path, ext=('jpeg', 'jpg', 'png', 'tiff'), datamap=None, load_fr
         with np.load(cached_file, allow_pickle=True) as cache:
             datamap = np.concatenate((datamap, cache['datamap']))
 
-        print('Cached data loaded!')
+        print('Loading finished!')
     else:
         print('Loading data...')
 
@@ -52,13 +52,13 @@ def load_datamap(path, ext=('jpeg', 'jpg', 'png', 'tiff'), datamap=None, load_fr
 
         datamap.resize((index,), refcheck=False)
 
-        print('Data loaded!')
+        print('Loading finished!')
 
         if save_to_cache:
             print('Caching data...')
 
             np.savez_compressed(cached_file, datamap=datamap)
 
-            print('Data cached!')
+            print('Caching finished!')
 
     return datamap

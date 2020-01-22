@@ -4,3 +4,4 @@ datasets/
 models/
 env/
 __pycache__/
+wandb/

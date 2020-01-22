@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
-import tensorflow as tf
+import cv2 as cv
 
 
-def boolean_input(prompt):
+def input_boolean(prompt):
     while True:
         print(prompt)
         retval = input('> ')
@@ -18,16 +17,9 @@ def boolean_input(prompt):
             return switch[retval]
 
 
-def display_prediction(input_image, ground_truth, predicted_image):
-    display_list = [input_image, ground_truth, predicted_image[0]]
-    title_list = ['Input image', 'Ground truth', 'Predicted image']
-
-    plt.figure(figsize=(15, 15))
-
-    for idx in range(3):
-        plt.subplot(1, 3, idx + 1)
-        plt.title(title_list[idx])
-        plt.axis('off')
-        plt.imshow(tf.keras.preprocessing.image.array_to_img(display_list[idx]))
-
-    plt.show()
+def print_prediction(input_image, ground_truth, predicted_image):
+    cv.imshow('Input image', input_image)
+    cv.imshow('Ground truth', ground_truth)
+    cv.imshow('Predicted image', predicted_image)
+    cv.waitKey(0)
+    cv.destroyAllWindows()

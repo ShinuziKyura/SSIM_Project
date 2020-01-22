@@ -1,15 +1,5 @@
-import os
-import sys
-import datetime
-
 import tensorflow as tf
-
-
-# TODO check:
-#  https://www.analyticsvidhya.com/blog/2019/04/introduction-image-segmentation-techniques-python/?utm_source=blog&utm_medium=computer-vision-implementing-mask-r-cnn-image-segmentation
-#  https://blog.athelas.com/a-brief-history-of-cnns-in-image-segmentation-from-r-cnn-to-mask-r-cnn-34ea83205de4
-#  https://www.tensorflow.org/tutorials/images/segmentation
-#  https://arxiv.org/abs/1505.04597
+# import wandb
 
 
 def downsampling_layer(filters, size, apply_normalization=True):
@@ -54,7 +44,7 @@ def upsampling_layer(filters, size, apply_dropout=False):
     return result
 
 
-def create_unet_model():  # TODO possibly pass input/output shape and adjust
+def create_model():
     print('Creating model...')
 
     inputs = tf.keras.layers.Input(shape=[256, 256, 3])
@@ -82,7 +72,7 @@ def create_unet_model():  # TODO possibly pass input/output shape and adjust
 
     initializer = tf.random_normal_initializer(0.0, 0.02)
     last = tf.keras.layers.Conv2DTranspose(filters=1,
-                                           kernel_size=3,
+                                           kernel_size=4,
                                            strides=2,
                                            padding='same',
                                            kernel_initializer=initializer,
@@ -132,13 +122,12 @@ def test_step(model, images, labels, loss_function):
 def train_model(dataset, model, loss_function, dataset_split=0.1, batch_size=50, learning_rate=0.001, epochs=20):
     print('Training model...')
 
+    # wandb.config.epochs = epochs
+    # wandb.config.dataset_size = dataset.size
+    # wandb.config.batch_size = batch_size
+    # wandb.config.dataset_split = 1.0 - dataset_split
+
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    summary = tf.summary.create_file_writer(
-        os.path.normpath(os.path.join(
-            os.path.dirname(sys.argv[0]),
-            'logs/{}_{}'.format(loss_function.name, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        ))
-    )
 
     split_index = int(dataset.size * dataset_split)
 
@@ -150,7 +139,7 @@ def train_model(dataset, model, loss_function, dataset_split=0.1, batch_size=50,
         (dataset.images[:split_index], dataset.labels[:split_index])
     ).batch(batch_size)
 
-    for epoch in range(epochs):  # TODO add way to log and report loss
+    for epoch in range(epochs):
         print('\tEpoch: {}'.format(epoch + 1))
 
         total_loss = 0.0
@@ -159,12 +148,10 @@ def train_model(dataset, model, loss_function, dataset_split=0.1, batch_size=50,
         for images, labels in train_dataset:
             loss = train_step(model, images, labels, optimizer, loss_function)
 
-            with summary.as_default():
-                tf.summary.scalar('Train Loss', loss, step=epoch + 1)
-
             total_loss += loss
             total_steps += 1.0
 
+            # wandb.log({'train_loss': loss.numpy()})
             print('\t\tTrain loss: {}\t\t\t\t\t'.format(loss), end='\r')
 
         print('\t\tTrain average loss: {}\t\t\t\t\t'.format(total_loss / total_steps))
@@ -175,14 +162,13 @@ def train_model(dataset, model, loss_function, dataset_split=0.1, batch_size=50,
         for images, labels in test_dataset:
             loss = test_step(model, images, labels, loss_function)
 
-            with summary.as_default():
-                tf.summary.scalar('Test Loss', loss, step=epoch + 1)
-
             total_loss += loss
             total_steps += 1.0
 
+            # wandb.log({'test_loss': loss.numpy()})
             print('\t\tTest loss: {}\t\t\t\t\t'.format(loss), end='\r')
 
         print('\t\tTest average loss: {}\t\t\t\t\t'.format(total_loss / total_steps))
 
-    print('Model trained!')
+
+print('Training finished!')
