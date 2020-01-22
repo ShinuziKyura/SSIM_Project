@@ -1,3 +1,7 @@
+import os
+import sys
+import datetime
+
 import tensorflow as tf
 
 
@@ -6,6 +10,7 @@ import tensorflow as tf
 #  https://blog.athelas.com/a-brief-history-of-cnns-in-image-segmentation-from-r-cnn-to-mask-r-cnn-34ea83205de4
 #  https://www.tensorflow.org/tutorials/images/segmentation
 #  https://arxiv.org/abs/1505.04597
+
 
 def downsampling_layer(filters, size, apply_normalization=True):
     initializer = tf.random_normal_initializer(0.0, 0.02)
@@ -124,13 +129,18 @@ def test_step(model, images, labels, loss_function):
     return loss
 
 
-def train_model(dataset, model, dataset_split=0.1, learning_rate=0.001, batch_size=50, epochs=20):
+def train_model(dataset, model, loss_function, dataset_split=0.1, batch_size=50, learning_rate=0.001, epochs=20):
     print('Training model...')
 
-    split_index = int(dataset.size * dataset_split)
-
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    loss_function = tf.keras.losses.MeanSquaredError()
+    summary = tf.summary.create_file_writer(
+        os.path.normpath(os.path.join(
+            os.path.dirname(sys.argv[0]),
+            'logs/{}_{}'.format(loss_function.name, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        ))
+    )
+
+    split_index = int(dataset.size * dataset_split)
 
     train_dataset = tf.data.Dataset.from_tensor_slices(
         (dataset.images[split_index:], dataset.labels[split_index:])
@@ -140,33 +150,39 @@ def train_model(dataset, model, dataset_split=0.1, learning_rate=0.001, batch_si
         (dataset.images[:split_index], dataset.labels[:split_index])
     ).batch(batch_size)
 
-    for epoch in range(epochs):
+    for epoch in range(epochs):  # TODO add way to log and report loss
         print('\tEpoch: {}'.format(epoch + 1))
 
         total_loss = 0.0
-        total_steps = 0
+        total_steps = 0.0
 
         for images, labels in train_dataset:
             loss = train_step(model, images, labels, optimizer, loss_function)
 
+            with summary.as_default():
+                tf.summary.scalar('Train Loss', loss, step=epoch + 1)
+
             total_loss += loss
-            total_steps += 1
+            total_steps += 1.0
 
-            print('\t\tTrain loss: {}'.format(loss), end='\r')
+            print('\t\tTrain loss: {}\t\t\t\t\t'.format(loss), end='\r')
 
-        print('\t\tTrain loss: {}'.format(total_loss / total_steps))
+        print('\t\tTrain average loss: {}\t\t\t\t\t'.format(total_loss / total_steps))
 
         total_loss = 0.0
-        amount = 0
+        total_steps = 0.0
 
         for images, labels in test_dataset:
             loss = test_step(model, images, labels, loss_function)
 
+            with summary.as_default():
+                tf.summary.scalar('Test Loss', loss, step=epoch + 1)
+
             total_loss += loss
-            amount += 1
+            total_steps += 1.0
 
-            print('\t\tTest loss: {}'.format(loss), end='\r')
+            print('\t\tTest loss: {}\t\t\t\t\t'.format(loss), end='\r')
 
-        print('\t\tTest loss: {}'.format(total_loss / total_steps))
+        print('\t\tTest average loss: {}\t\t\t\t\t'.format(total_loss / total_steps))
 
     print('Model trained!')

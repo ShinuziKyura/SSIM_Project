@@ -17,11 +17,12 @@ arte_lab_images_path = 'datasets/ArTe-Lab_1D_Medium_Barcode/images/'
 arte_lab_masks_path = 'datasets/ArTe-Lab_1D_Medium_Barcode/masks/'
 
 mse_models_path = 'models/mean_squared_error'
-#bc_models_path = 'models/binary_crossentropy'
+mae_models_path = 'models/mean_absolute_error'
+bc_models_path = 'models/binary_crossentropy'
 
 
-def execute(image_paths, mask_paths, model_path):
-    assert len(image_paths) == len(mask_paths)
+def execute(images_paths, masks_paths, model_path):
+    assert len(images_paths) == len(masks_paths)
 
     print('Initializing...')
 
@@ -29,15 +30,15 @@ def execute(image_paths, mask_paths, model_path):
     images = None
     masks = None
 
-    for image_path, mask_path in zip(image_paths, mask_paths):
-        images = storage.load_datamap(image_path, datamap=images)
-        masks = storage.load_datamap(mask_path, datamap=masks)
+    for images_path, masks_path in zip(images_paths, masks_paths):
+        images = storage.load_datamap(images_path, datamap=images)
+        masks = storage.load_datamap(masks_path, datamap=masks)
 
     # Create dataset
     dataset = datasets.create_dataset(images, masks, rescale=(256, 256))
 
     # Augment dataset
-    dataset = datasets.augment_dataset(dataset, new_size=5000)
+    dataset = datasets.augment_dataset(dataset, new_size=2500)
 
     # Create model
     model = models.create_unet_model()
@@ -51,8 +52,16 @@ def execute(image_paths, mask_paths, model_path):
         result = model.predict(np.array([dataset.images[index]]))
         utils.display_prediction(dataset.images[index], dataset.labels[index], result)
 
+    loss_function = tf.keras.losses.MeanSquaredError(name='mse')
+    # loss_function = tf.keras.losses.MeanAbsoluteError(name='mae')
+    # loss_function = tf.keras.losses.BinaryCrossentropy(name='bc')
+
     # Train model
-    models.train_model(dataset, model, batch_size=50, epochs=20)
+    models.train_model(
+        dataset, model,
+        loss_function=loss_function,
+        epochs=50,
+    )
 
     # Predict images (post-training)
     for index in range(5):

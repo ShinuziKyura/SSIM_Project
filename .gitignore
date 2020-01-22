@@ -3,3 +3,4 @@ cache/
 datasets/
 models/
 env/
+__pycache__/
