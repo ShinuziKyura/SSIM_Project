@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import cv2 as cv
 import tensorflow as tf
 # import wandb
 
@@ -58,6 +59,7 @@ def main():
         'mae': tf.keras.losses.MeanAbsoluteError(name='mae'),
         'bce': tf.keras.losses.BinaryCrossentropy(name='bce')
     }[sys.argv[1]] if len(sys.argv) > 1 else tf.keras.losses.MeanSquaredError(name='mse')
+    epochs = int(sys.argv[2]) if len(sys.argv) > 2 else 20
 
     print(loss_function)
 
@@ -79,7 +81,7 @@ def main():
     models.train_model(
         dataset, model,
         loss_function=loss_function,
-        epochs=60,
+        epochs=epochs
     )
 
     # Predict images (post-training)

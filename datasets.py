@@ -82,13 +82,15 @@ def augment_dataset(dataset, new_size=1000):
     dataset.labels.resize((new_size,) + dataset.label_shape, refcheck=False)
     dataset.size = new_size
 
+    bc_augmentation = tf.keras.preprocessing.image.ImageDataGenerator(
+        channel_shift_range=0.5
+    )
     augmentation = tf.keras.preprocessing.image.ImageDataGenerator(
         rotation_range=360,
         width_shift_range=0.25,
         height_shift_range=0.25,
         shear_range=0.5,
         zoom_range=0.25,
-        channel_shift_range=0.5,
         fill_mode='reflect'
     )
 
@@ -96,7 +98,8 @@ def augment_dataset(dataset, new_size=1000):
         choice = np.random.randint(old_size)
         seed = np.random.randint(2147483647)
 
-        dataset.images[index] = augmentation.random_transform(dataset.images[choice], seed)
+        bc_augmented_image = bc_augmentation.random_transform(dataset.images[choice])
+        dataset.images[index] = augmentation.random_transform(bc_augmented_image, seed)
         dataset.labels[index] = augmentation.random_transform(dataset.labels[choice], seed)
 
         # cv.imshow('image_wnd', dataset.images[index])
